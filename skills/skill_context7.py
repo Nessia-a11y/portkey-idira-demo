@@ -188,39 +188,22 @@ async def exchange_code(code: str = None, state: str = None, token: str = None) 
     return None
 
 
-def _headers(access_token: str) -> dict[str, str]:
-    return {
-        "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json",
-    }
-
-
 async def _call_mcp_tool(tool_name: str, arguments: dict[str, Any], access_token: str) -> str:
-    """Call a tool on the Context7 MCP server via HTTP POST (JSON-RPC style)."""
-    payload = {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "tools/call",
-        "params": {
-            "name": tool_name,
-            "arguments": arguments,
-        },
-    }
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        resp = await client.post(CONTEXT7_URL, json=payload, headers=_headers(access_token))
-        resp.raise_for_status()
-        data = resp.json()
+    """Call a tool on the Context7 MCP server via SSE client with OAuth token."""
+    from mcp import ClientSession
+    from mcp.client.sse import sse_client
 
-    if "error" in data:
-        return f"Context7 error: {data['error']}"
+    headers = {"Authorization": f"Bearer {access_token}"}
 
-    result = data.get("result", {})
-    content = result.get("content", [])
-    parts = []
-    for block in content:
-        if isinstance(block, dict) and block.get("text"):
-            parts.append(block["text"])
-    return "\n".join(parts) if parts else str(result)
+    async with sse_client(url=CONTEXT7_URL, headers=headers) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            result = await session.call_tool(tool_name, arguments)
+            parts = []
+            for block in result.content:
+                if hasattr(block, "text"):
+                    parts.append(block.text)
+            return "\n".join(parts) if parts else "(no output)"
 
 
 async def handle(arguments: dict[str, Any]) -> str:
