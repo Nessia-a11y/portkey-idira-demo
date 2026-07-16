@@ -250,7 +250,7 @@ async def run_agent_loop(client: Portkey, messages: list[dict], user_type: str, 
                 args = {}
 
             result = await _dispatch_tool_call(name, args, user_email)
-            tool_trace.append({"name": name, "arguments": args, "result": result[:500]})
+            tool_trace.append({"name": name, "arguments": args, "result": result[:2000]})
             messages.append(
                 {
                     "role": "tool",
