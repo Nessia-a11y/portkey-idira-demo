@@ -196,8 +196,8 @@ async def exchange_code(code: str = None, state: str = None, token: str = None) 
     return None
 
 
-async def _mcp_initialize(access_token: str) -> None:
-    """Send MCP initialize request."""
+async def _mcp_initialize(access_token: str) -> Optional[str]:
+    """Send MCP initialize request and return session ID."""
     headers = {
         "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json",
@@ -214,16 +214,21 @@ async def _mcp_initialize(access_token: str) -> None:
         },
     }
     async with httpx.AsyncClient(timeout=10.0) as client:
-        await client.post(CONTEXT7_URL, json=payload, headers=headers)
+        resp = await client.post(CONTEXT7_URL, json=payload, headers=headers)
+        session_id = resp.headers.get("mcp-session-id") or resp.headers.get("Mcp-Session-Id")
+        print(f"[context7] initialize: status={resp.status_code} session_id={session_id}")
+        return session_id
 
 
-async def _call_mcp_tool(tool_name: str, arguments: dict[str, Any], access_token: str) -> str:
+async def _call_mcp_tool(tool_name: str, arguments: dict[str, Any], access_token: str, session_id: str = None) -> str:
     """Call a tool on the Context7 MCP server via Streamable HTTP transport."""
     headers = {
         "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json",
         "Accept": "application/json, text/event-stream",
     }
+    if session_id:
+        headers["Mcp-Session-Id"] = session_id
 
     # Try Streamable HTTP (newer MCP transport)
     payload = {
@@ -305,16 +310,21 @@ async def handle(arguments: dict[str, Any]) -> str:
             "message": "需要先登录 Idira 进行身份验证。请点击以下链接完成认证后重试。",
         })
 
-    # Initialize MCP session first
+    # Initialize MCP session to get session ID
     try:
-        await _mcp_initialize(token)
-    except Exception:
-        pass
+        session_id = await _mcp_initialize(token)
+    except Exception as e:
+        _token_path(email).unlink(missing_ok=True)
+        auth_url = create_auth_url(email)
+        return json.dumps({
+            "needs_auth": True,
+            "auth_url": auth_url,
+            "message": f"Idira 连接失败（{type(e).__name__}），请重新进行身份验证。",
+        })
 
     try:
-        resolve_result = await _call_mcp_tool("resolve-library-id", {"libraryName": library_name}, token)
+        resolve_result = await _call_mcp_tool("resolve-library-id", {"libraryName": library_name}, token, session_id)
     except Exception as e:
-        # Any connection failure — clear token and prompt re-auth
         _token_path(email).unlink(missing_ok=True)
         auth_url = create_auth_url(email)
         return json.dumps({
@@ -332,7 +342,7 @@ async def handle(arguments: dict[str, Any]) -> str:
         doc_args = {"context7CompatibleLibraryID": library_id}
         if topic:
             doc_args["topic"] = topic
-        docs_result = await _call_mcp_tool("get-library-docs", doc_args, token)
+        docs_result = await _call_mcp_tool("get-library-docs", doc_args, token, session_id)
     except Exception as e:
         _token_path(email).unlink(missing_ok=True)
         auth_url = create_auth_url(email)
