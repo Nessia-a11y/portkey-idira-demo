@@ -188,30 +188,87 @@ async def exchange_code(code: str = None, state: str = None, token: str = None) 
     return None
 
 
+async def _mcp_initialize(access_token: str) -> None:
+    """Send MCP initialize request."""
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/event-stream",
+    }
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 0,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": {"name": "panw-product-helper", "version": "1.0.0"},
+        },
+    }
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        await client.post(CONTEXT7_URL, json=payload, headers=headers)
+
+
 async def _call_mcp_tool(tool_name: str, arguments: dict[str, Any], access_token: str) -> str:
-    """Call a tool on the Context7 MCP server via SSE client with OAuth token."""
-    from mcp import ClientSession
-    from mcp.client.sse import sse_client
+    """Call a tool on the Context7 MCP server via Streamable HTTP transport."""
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/event-stream",
+    }
 
-    headers = {"Authorization": f"Bearer {access_token}"}
+    # Try Streamable HTTP (newer MCP transport)
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "name": tool_name,
+            "arguments": arguments,
+        },
+    }
 
-    try:
-        async with sse_client(url=CONTEXT7_URL, headers=headers) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                result = await session.call_tool(tool_name, arguments)
-                parts = []
-                for block in result.content:
-                    if hasattr(block, "text"):
-                        parts.append(block.text)
-                return "\n".join(parts) if parts else "(no output)"
-    except Exception as e:
-        error_msg = str(e)
-        print(f"[context7] MCP SSE error: {error_msg}")
-        # If auth-related error, clear token so user can re-auth
-        if "401" in error_msg or "403" in error_msg or "unauthorized" in error_msg.lower():
-            raise Exception(f"AUTH_EXPIRED: {error_msg}")
-        raise
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        resp = await client.post(CONTEXT7_URL, json=payload, headers=headers)
+
+        if resp.status_code == 401 or resp.status_code == 403:
+            raise Exception(f"AUTH_EXPIRED: {resp.status_code}")
+
+        resp.raise_for_status()
+
+        content_type = resp.headers.get("content-type", "")
+
+        # JSON response
+        if "application/json" in content_type:
+            data = resp.json()
+            if "error" in data:
+                return f"Context7 error: {data['error']}"
+            result = data.get("result", {})
+            content = result.get("content", [])
+            parts = []
+            for block in content:
+                if isinstance(block, dict) and block.get("text"):
+                    parts.append(block["text"])
+            return "\n".join(parts) if parts else str(result)
+
+        # SSE stream response
+        if "text/event-stream" in content_type:
+            text = resp.text
+            parts = []
+            for line in text.split("\n"):
+                if line.startswith("data:"):
+                    try:
+                        event_data = json.loads(line[5:].strip())
+                        result = event_data.get("result", {})
+                        content = result.get("content", [])
+                        for block in content:
+                            if isinstance(block, dict) and block.get("text"):
+                                parts.append(block["text"])
+                    except json.JSONDecodeError:
+                        pass
+            return "\n".join(parts) if parts else text
+
+        return resp.text
 
 
 async def handle(arguments: dict[str, Any]) -> str:
@@ -237,6 +294,12 @@ async def handle(arguments: dict[str, Any]) -> str:
             "auth_url": auth_url,
             "message": "需要先登录 Idira 进行身份验证。请点击以下链接完成认证后重试。",
         })
+
+    # Initialize MCP session first
+    try:
+        await _mcp_initialize(token)
+    except Exception:
+        pass
 
     try:
         resolve_result = await _call_mcp_tool("resolve-library-id", {"libraryName": library_name}, token)
