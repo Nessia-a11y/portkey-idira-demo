@@ -1,0 +1,25 @@
+services:
+  app:
+    build: .
+    container_name: panw-product-helper
+    expose:
+      - "3587"
+    env_file:
+      - .env
+    volumes:
+      - ./mcp_servers.json:/app/mcp_servers.json:ro
+      - ./data:/app/data
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    container_name: panw-nginx
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      - app
+    restart: unless-stopped

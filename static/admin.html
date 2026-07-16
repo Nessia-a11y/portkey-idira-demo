@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>管理后台 — PANW 产品助手</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; background: #0f1419; color: #e6e6e6; min-height: 100vh; }
+  header { padding: 16px 24px; background: #1a1f2e; border-bottom: 1px solid #2a2f3e; display: flex; align-items: center; gap: 12px; }
+  header h1 { margin: 0; font-size: 18px; }
+  header .badge { font-size: 12px; background: #f04e23; color: white; padding: 2px 8px; border-radius: 4px; }
+  header nav { margin-left: auto; display: flex; align-items: center; gap: 16px; }
+  header nav a { color: #8a94a6; text-decoration: none; font-size: 14px; }
+  header nav .admin-email { color: #8a94a6; font-size: 13px; }
+  .container { max-width: 1000px; margin: 0 auto; padding: 24px; }
+  .access-denied { text-align: center; padding: 80px 24px; }
+  .access-denied h2 { color: #f44336; }
+  .access-denied a { color: #f04e23; }
+  .tabs { display: flex; gap: 0; margin-bottom: 24px; border-bottom: 1px solid #2a2f3e; flex-wrap: wrap; }
+  .tab { padding: 10px 20px; cursor: pointer; color: #8a94a6; border-bottom: 2px solid transparent; font-size: 14px; }
+  .tab.active { color: #f04e23; border-bottom-color: #f04e23; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  .card { background: #1a1f2e; border: 1px solid #2a2f3e; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .card h3 { margin: 0 0 12px; font-size: 14px; }
+  .form-row { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+  .form-group { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 150px; }
+  .form-group label { font-size: 12px; color: #8a94a6; }
+  .form-group input, .form-group select, .form-group textarea { padding: 8px 12px; border-radius: 6px; border: 1px solid #2a2f3e; background: #0f1419; color: #e6e6e6; font-size: 13px; }
+  .form-group textarea { min-height: 80px; resize: vertical; }
+  .btn { padding: 8px 16px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; font-size: 13px; }
+  .btn-primary { background: #f04e23; color: white; }
+  .btn-danger { background: #c0392b; color: white; }
+  .btn-secondary { background: #2a2f3e; color: #e6e6e6; }
+  .btn-sm { padding: 4px 10px; font-size: 12px; }
+  .btn-warning { background: #e67e22; color: white; }
+  .status { font-size: 13px; margin-top: 8px; padding: 8px; border-radius: 4px; }
+  .status.ok { background: #1a3a2a; color: #4caf50; }
+  .status.err { background: #3a1a1a; color: #f44336; }
+  .list-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #2a2f3e; font-size: 13px; }
+  .list-item:last-child { border-bottom: none; }
+  .list-item .del { color: #c0392b; cursor: pointer; font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 8px 10px; border-bottom: 1px solid #2a2f3e; color: #8a94a6; font-weight: 500; }
+  td { padding: 8px 10px; border-bottom: 1px solid #1a1f2e; }
+  .badge-ok { background: #1a3a2a; color: #4caf50; padding: 2px 6px; border-radius: 3px; font-size: 11px; }
+  .badge-fail { background: #3a1a1a; color: #f44336; padding: 2px 6px; border-radius: 3px; font-size: 11px; }
+  .badge-active { background: #1a3a2a; color: #4caf50; padding: 2px 6px; border-radius: 3px; font-size: 11px; }
+  .badge-disabled { background: #3a2a1a; color: #ff9800; padding: 2px 6px; border-radius: 3px; font-size: 11px; }
+  .badge-admin { background: #1a2a3a; color: #2196f3; padding: 2px 6px; border-radius: 3px; font-size: 11px; }
+  .auth-bar { margin-bottom: 20px; display: flex; align-items: center; gap: 12px; }
+  .auth-bar label { font-size: 13px; color: #8a94a6; }
+  .auth-bar input { padding: 8px 12px; border-radius: 6px; border: 1px solid #2a2f3e; background: #0f1419; color: #e6e6e6; font-size: 13px; width: 200px; }
+  .section-divider { border-top: 1px solid #2a2f3e; margin: 16px 0; padding-top: 16px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>PANW 产品助手</h1>
+  <span class="badge">管理后台</span>
+  <nav>
+    <span class="admin-email" id="admin-email"></span>
+    <a href="/">对话</a>
+  </nav>
+</header>
+
+<div class="container" id="main-content">
+  <div id="access-denied" class="access-denied" style="display:none">
+    <h2>权限不足</h2>
+    <p>您需要管理员权限才能访问此页面。</p>
+    <p><a href="/">返回对话</a> | <a href="/" onclick="event.preventDefault();fetch('/auth/logout',{method:'POST'}).then(()=>location.href='/')">切换账号</a></p>
+  </div>
+
+  <div id="admin-panel" style="display:none">
+    <div class="auth-bar"><label>管理令牌（技能API）：</label><input id="token" type="password" placeholder="输入令牌" /></div>
+
+    <div class="tabs">
+      <div class="tab active" data-panel="domains">域名管理</div>
+      <div class="tab" data-panel="users">用户管理</div>
+      <div class="tab" data-panel="activity">登录记录</div>
+      <div class="tab" data-panel="datasheets">Datasheet</div>
+      <div class="tab" data-panel="internal">内部演示</div>
+      <div class="tab" data-panel="external">外部演示</div>
+      <div class="tab" data-panel="sku">SKU 规则</div>
+      <div class="tab" data-panel="techdocs">技术文档</div>
+    </div>
+
+    <!-- Domains Panel -->
+    <div id="panel-domains" class="panel active">
+      <div class="card">
+        <h3>允许注册的邮箱域名</h3>
+        <p style="font-size:12px;color:#8a94a6;margin:0 0 12px;">只有邮箱域名在此列表中的用户才能注册。</p>
+        <div class="form-row">
+          <div class="form-group"><label>域名</label><input id="dom-input" placeholder="example.com" /></div>
+          <div class="form-group" style="max-width:100px;justify-content:flex-end"><button class="btn btn-primary" onclick="addDomain()">添加</button></div>
+        </div>
+        <div id="dom-status"></div>
+      </div>
+      <div class="card"><h3>当前域名列表</h3><div id="dom-list">加载中...</div></div>
+    </div>
+
+    <!-- Users Panel -->
+    <div id="panel-users" class="panel">
+      <div class="card">
+        <h3>已注册用户</h3>
+        <div id="users-list">加载中...</div>
+      </div>
+    </div>
+
+    <!-- Activity Panel -->
+    <div id="panel-activity" class="panel">
+      <div class="card">
+        <h3>活跃会话</h3>
+        <div id="sessions-list">加载中...</div>
+      </div>
+      <div class="card">
+        <h3>登录日志（最近100条）</h3>
+        <div id="logs-list" style="max-height:500px;overflow-y:auto;">加载中...</div>
+      </div>
+    </div>
+
+    <!-- Datasheets Panel -->
+    <div id="panel-datasheets" class="panel">
+      <div class="card">
+        <h3>上传 Datasheet（PDF）</h3>
+        <p style="font-size:12px;color:#8a94a6;margin:0 0 12px;">上传产品 Datasheet 到 RAG 库，用户提问时 Agent 可直接提供下载链接。</p>
+        <div class="form-row">
+          <div class="form-group"><label>标题</label><input id="ds-title" placeholder="Cortex XDR Datasheet" /></div>
+          <div class="form-group"><label>产品</label><input id="ds-product" placeholder="Cortex XDR" /></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group" style="max-width:120px"><label>语言</label>
+            <select id="ds-lang"><option value="zh">中文</option><option value="en">English</option></select>
+          </div>
+          <div class="form-group"><label>文件（PDF）</label><input id="ds-file" type="file" accept=".pdf" /></div>
+        </div>
+        <button class="btn btn-primary" onclick="uploadDatasheet()">上传</button>
+        <div id="ds-status"></div>
+      </div>
+      <div class="card"><h3>已有 Datasheet</h3><div id="ds-list">加载中...</div></div>
+    </div>
+
+    <!-- Internal Demos Panel -->
+    <div id="panel-internal" class="panel">
+      <div class="card">
+        <h3>添加内部演示（G-Drive 链接）</h3>
+        <div class="form-row">
+          <div class="form-group"><label>标题</label><input id="id-title" placeholder="Cortex XDR 演示 2024" /></div>
+          <div class="form-group"><label>产品</label><input id="id-product" placeholder="Cortex XDR" /></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>G-Drive 链接</label><input id="id-url" placeholder="https://drive.google.com/..." /></div>
+          <div class="form-group" style="max-width:120px"><label>类型</label>
+            <select id="id-type"><option value="video">视频</option><option value="slide">幻灯片</option></select>
+          </div>
+        </div>
+        <div class="form-row"><div class="form-group"><label>描述</label><input id="id-desc" placeholder="可选" /></div></div>
+        <button class="btn btn-primary" onclick="addInternalDemo()">添加</button>
+        <div id="id-status"></div>
+      </div>
+      <div class="card"><h3>当前条目</h3><div id="id-list">加载中...</div></div>
+    </div>
+
+    <!-- External Demos Panel -->
+    <div id="panel-external" class="panel">
+      <div class="card">
+        <h3>上传外部演示文件</h3>
+        <div class="form-row">
+          <div class="form-group"><label>产品</label><input id="ed-product" placeholder="Prisma Access" /></div>
+          <div class="form-group" style="max-width:120px"><label>类型</label>
+            <select id="ed-type"><option value="video">视频</option><option value="slide">幻灯片</option><option value="pdf">PDF</option></select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>描述</label><input id="ed-desc" placeholder="可选" /></div>
+          <div class="form-group"><label>文件</label><input id="ed-file" type="file" /></div>
+        </div>
+        <button class="btn btn-primary" onclick="uploadExternal()">上传</button>
+        <div id="ed-status"></div>
+      </div>
+      <div class="card"><h3>当前文件</h3><div id="ed-list">加载中...</div></div>
+    </div>
+
+    <!-- SKU Panel -->
+    <div id="panel-sku" class="panel">
+      <div class="card">
+        <h3>上传 SKU 文档（Doc / Slide / PDF）</h3>
+        <p style="font-size:12px;color:#8a94a6;margin:0 0 12px;">上传包含 SKU 规则的文档，Agent 会根据用户提问自动从文档中提取相关内容回复。</p>
+        <div class="form-row">
+          <div class="form-group"><label>产品</label><input id="skuf-product" placeholder="Prisma Access" /></div>
+          <div class="form-group"><label>描述</label><input id="skuf-desc" placeholder="Prisma Access 许可计算规则" /></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>文件（.docx / .pptx / .pdf / .txt）</label><input id="skuf-file" type="file" accept=".docx,.pptx,.pdf,.txt,.md,.csv" /></div>
+        </div>
+        <button class="btn btn-primary" onclick="uploadSkuFile()">上传</button>
+        <div id="skuf-status"></div>
+      </div>
+      <div class="card"><h3>已上传 SKU 文档</h3><div id="skuf-list">加载中...</div></div>
+
+      <div class="card">
+        <div class="section-divider"></div>
+        <h3>手动添加 SKU 数据（结构化）</h3>
+        <div class="form-row">
+          <div class="form-group"><label>产品</label><input id="sku-product" placeholder="Prisma Access" /></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>SKU（JSON 数组）</label>
+            <textarea id="sku-json" placeholder='[{"sku":"PAN-SVC-BKLN-25","description":"Business Premium 25用户","notes":"年付"}]'></textarea>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>计算说明</label>
+            <textarea id="sku-notes" placeholder="如何计算：用户数 x ..."></textarea>
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="addSku()">添加/更新</button>
+        <div id="sku-status"></div>
+      </div>
+      <div class="card"><h3>已有 SKU 产品（结构化）</h3><div id="sku-list">加载中...</div></div>
+    </div>
+
+    <!-- TechDocs Panel -->
+    <div id="panel-techdocs" class="panel">
+      <div class="card">
+        <h3>上传技术文档（Datasheet / Doc / PDF）</h3>
+        <p style="font-size:12px;color:#8a94a6;margin:0 0 12px;">上传技术文档到 RAG 库，Agent 查询技术问题时会搜索这些文档。</p>
+        <div class="form-row">
+          <div class="form-group"><label>标题</label><input id="tdf-title" placeholder="Prisma Access 部署架构" /></div>
+          <div class="form-group"><label>产品</label><input id="tdf-product" placeholder="prisma-access" /></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>描述</label><input id="tdf-desc" placeholder="可选" /></div>
+          <div class="form-group"><label>文件</label><input id="tdf-file" type="file" accept=".pdf,.docx,.pptx,.txt,.md" /></div>
+        </div>
+        <button class="btn btn-primary" onclick="uploadTechdocFile()">上传</button>
+        <div id="tdf-status"></div>
+      </div>
+      <div class="card"><h3>已上传技术文档</h3><div id="tdf-list">加载中...</div></div>
+
+      <div class="card">
+        <div class="section-divider"></div>
+        <h3>手动添加内部文档（文本）</h3>
+        <div class="form-row">
+          <div class="form-group"><label>标题</label><input id="td-title" placeholder="Prisma Access GlobalProtect 部署指南" /></div>
+          <div class="form-group"><label>产品</label><input id="td-product" placeholder="prisma-access" /></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>标签（逗号分隔）</label><input id="td-tags" placeholder="部署, globalprotect, 最佳实践" /></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>内容</label><textarea id="td-content" style="min-height:150px" placeholder="详细部署步骤..."></textarea></div>
+        </div>
+        <button class="btn btn-primary" onclick="addTechdoc()">添加</button>
+        <div id="td-status"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const T = () => document.getElementById('token').value;
+
+async function init() {
+  try {
+    const res = await fetch('/admin/check');
+    if (res.status === 401) { location.href = '/'; return; }
+    const data = await res.json();
+    if (!data.is_admin) {
+      document.getElementById('access-denied').style.display = '';
+      return;
+    }
+    document.getElementById('admin-email').textContent = data.email;
+    document.getElementById('admin-panel').style.display = '';
+    loadAll();
+  } catch {
+    location.href = '/';
+  }
+}
+
+function loadAll() {
+  loadDomains();
+  loadUsers();
+  loadActivity();
+}
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('panel-' + tab.dataset.panel).classList.add('active');
+  });
+});
+
+function status(id, msg, ok) {
+  const el = document.getElementById(id);
+  el.className = 'status ' + (ok ? 'ok' : 'err');
+  el.textContent = msg;
+}
+
+function formatTime(ts) {
+  if (!ts) return '-';
+  return new Date(ts * 1000).toLocaleString('zh-CN');
+}
+
+// --- Domains ---
+async function addDomain() {
+  const domain = document.getElementById('dom-input').value.trim();
+  if (!domain) return;
+  const form = new FormData();
+  form.append('domain', domain);
+  const res = await fetch('/admin/domains', { method: 'POST', body: form });
+  const d = await res.json();
+  status('dom-status', res.ok ? '已添加！' : d.detail, res.ok);
+  if (res.ok) { document.getElementById('dom-input').value = ''; loadDomains(); }
+}
+
+async function loadDomains() {
+  const res = await fetch('/admin/domains');
+  if (!res.ok) return;
+  const d = await res.json();
+  const el = document.getElementById('dom-list');
+  if (!d.domains.length) { el.textContent = '尚未配置域名，用户无法注册。'; return; }
+  el.innerHTML = d.domains.map(x =>
+    `<div class="list-item"><span>${x.domain} <span style="color:#8a94a6;font-size:11px">(添加于 ${formatTime(x.added_at)})</span></span><span class="del" onclick="delDomain('${x.domain}')">删除</span></div>`
+  ).join('');
+}
+
+async function delDomain(domain) {
+  await fetch('/admin/domains/' + encodeURIComponent(domain), { method: 'DELETE' });
+  loadDomains();
+}
+
+// --- Users ---
+async function loadUsers() {
+  const res = await fetch('/admin/users');
+  if (!res.ok) return;
+  const d = await res.json();
+  const el = document.getElementById('users-list');
+  if (!d.users.length) { el.textContent = '暂无用户。'; return; }
+  el.innerHTML = '<table><thead><tr><th>邮箱</th><th>角色</th><th>状态</th><th>注册时间</th><th>操作</th></tr></thead><tbody>' +
+    d.users.map(u => `<tr>
+      <td>${u.email}</td>
+      <td>${u.is_admin ? '<span class="badge-admin">管理员</span>' : '普通用户'}</td>
+      <td>${u.is_active ? '<span class="badge-active">正常</span>' : '<span class="badge-disabled">已禁用</span>'}</td>
+      <td>${formatTime(u.created_at)}</td>
+      <td>
+        <button class="btn btn-sm ${u.is_active ? 'btn-danger' : 'btn-secondary'}" onclick="toggleUser('${u.email}', ${u.is_active ? 0 : 1})">${u.is_active ? '禁用' : '启用'}</button>
+        <button class="btn btn-sm ${u.is_admin ? 'btn-warning' : 'btn-secondary'}" onclick="toggleAdmin('${u.email}', ${u.is_admin ? 0 : 1})">${u.is_admin ? '撤销管理员' : '设为管理员'}</button>
+      </td>
+    </tr>`).join('') + '</tbody></table>';
+}
+
+async function toggleUser(email, active) {
+  const form = new FormData();
+  form.append('email', email);
+  form.append('active', active);
+  await fetch('/admin/users/toggle', { method: 'POST', body: form });
+  loadUsers();
+}
+
+async function toggleAdmin(email, admin) {
+  const form = new FormData();
+  form.append('email', email);
+  form.append('admin', admin);
+  const res = await fetch('/admin/users/set-admin', { method: 'POST', body: form });
+  if (!res.ok) {
+    const d = await res.json();
+    alert(d.detail || '操作失败');
+  }
+  loadUsers();
+}
+
+// --- Activity ---
+async function loadActivity() {
+  const res1 = await fetch('/admin/active-sessions');
+  if (!res1.ok) return;
+  const s = await res1.json();
+  const sel = document.getElementById('sessions-list');
+  if (!s.sessions.length) { sel.textContent = '当前无活跃会话。'; }
+  else {
+    sel.innerHTML = '<table><thead><tr><th>邮箱</th><th>IP</th><th>登录时间</th><th>过期时间</th></tr></thead><tbody>' +
+      s.sessions.map(x => `<tr><td>${x.email}</td><td>${x.ip || '-'}</td><td>${formatTime(x.created_at)}</td><td>${formatTime(x.expires_at)}</td></tr>`).join('') +
+      '</tbody></table>';
+  }
+
+  const res2 = await fetch('/admin/login-logs');
+  if (!res2.ok) return;
+  const l = await res2.json();
+  const lel = document.getElementById('logs-list');
+  if (!l.logs.length) { lel.textContent = '暂无日志。'; }
+  else {
+    lel.innerHTML = '<table><thead><tr><th>时间</th><th>邮箱</th><th>操作</th><th>结果</th><th>IP</th></tr></thead><tbody>' +
+      l.logs.map(x => `<tr>
+        <td>${formatTime(x.timestamp)}</td>
+        <td>${x.email}</td>
+        <td>${x.action}</td>
+        <td>${x.success ? '<span class="badge-ok">成功</span>' : '<span class="badge-fail">失败</span>'}</td>
+        <td>${x.ip || '-'}</td>
+      </tr>`).join('') + '</tbody></table>';
+  }
+}
+
+// --- Datasheets ---
+async function uploadDatasheet() {
+  const file = document.getElementById('ds-file').files[0];
+  if (!file) { status('ds-status', '请选择文件', false); return; }
+  const form = new FormData();
+  form.append('token', T());
+  form.append('file', file);
+  form.append('title', document.getElementById('ds-title').value);
+  form.append('language', document.getElementById('ds-lang').value);
+  form.append('product', document.getElementById('ds-product').value);
+  const res = await fetch('/admin/datasheets', { method: 'POST', body: form });
+  const d = await res.json();
+  status('ds-status', res.ok ? '上传成功！' : d.detail, res.ok);
+  if (res.ok) loadDatasheets();
+}
+
+async function loadDatasheets() {
+  const res = await fetch('/admin/datasheets?token=' + encodeURIComponent(T()));
+  if (!res.ok) { document.getElementById('ds-list').textContent = '请输入令牌查看'; return; }
+  const d = await res.json();
+  const el = document.getElementById('ds-list');
+  if (!d.datasheets.length) { el.textContent = '暂无 Datasheet。'; return; }
+  el.innerHTML = d.datasheets.map(x => {
+    const lang = x.language === 'zh' || x.language === 'zh-CN' ? '中文' : 'English';
+    return `<div class="list-item"><span>${x.title} (${lang}) — ${x.product}</span><span class="del" onclick="delDatasheet('${encodeURIComponent(x.title)}')">删除</span></div>`;
+  }).join('');
+}
+
+async function delDatasheet(title) {
+  await fetch('/admin/datasheets/' + title + '?token=' + encodeURIComponent(T()), { method: 'DELETE' });
+  loadDatasheets();
+}
+
+// --- Internal Demos ---
+async function addInternalDemo() {
+  const form = new FormData();
+  form.append('token', T());
+  form.append('title', document.getElementById('id-title').value);
+  form.append('gdrive_url', document.getElementById('id-url').value);
+  form.append('resource_type', document.getElementById('id-type').value);
+  form.append('product', document.getElementById('id-product').value);
+  form.append('description', document.getElementById('id-desc').value);
+  const res = await fetch('/admin/internal-demos', { method: 'POST', body: form });
+  const d = await res.json();
+  status('id-status', res.ok ? '已添加！' : d.detail, res.ok);
+  if (res.ok) loadInternalDemos();
+}
+
+async function loadInternalDemos() {
+  const res = await fetch('/admin/internal-demos?token=' + encodeURIComponent(T()));
+  if (!res.ok) { document.getElementById('id-list').textContent = '请输入令牌查看'; return; }
+  const d = await res.json();
+  const el = document.getElementById('id-list');
+  if (!d.demos.length) { el.textContent = '暂无条目。'; return; }
+  el.innerHTML = d.demos.map(x => `<div class="list-item"><span>${x.title} (${x.type}) — ${x.product}</span><span class="del" onclick="delInternal('${x.title}')">删除</span></div>`).join('');
+}
+
+async function delInternal(title) {
+  await fetch('/admin/internal-demos/' + encodeURIComponent(title) + '?token=' + encodeURIComponent(T()), { method: 'DELETE' });
+  loadInternalDemos();
+}
+
+// --- External Demos ---
+async function uploadExternal() {
+  const file = document.getElementById('ed-file').files[0];
+  if (!file) { status('ed-status', '请选择文件', false); return; }
+  const form = new FormData();
+  form.append('token', T());
+  form.append('file', file);
+  form.append('resource_type', document.getElementById('ed-type').value);
+  form.append('product', document.getElementById('ed-product').value);
+  form.append('description', document.getElementById('ed-desc').value);
+  const res = await fetch('/admin/external-demos', { method: 'POST', body: form });
+  const d = await res.json();
+  status('ed-status', res.ok ? '已上传！' : d.detail, res.ok);
+  if (res.ok) loadExternalDemos();
+}
+
+async function loadExternalDemos() {
+  const res = await fetch('/admin/external-demos?token=' + encodeURIComponent(T()));
+  if (!res.ok) { document.getElementById('ed-list').textContent = '请输入令牌查看'; return; }
+  const d = await res.json();
+  const el = document.getElementById('ed-list');
+  if (!d.files.length) { el.textContent = '暂无文件。'; return; }
+  el.innerHTML = d.files.map(x => `<div class="list-item"><span>${x.original_name} (${x.type}) — ${x.product}</span><span class="del" onclick="delExternal('${x.stored_name}')">删除</span></div>`).join('');
+}
+
+async function delExternal(name) {
+  await fetch('/admin/external-demos/' + encodeURIComponent(name) + '?token=' + encodeURIComponent(T()), { method: 'DELETE' });
+  loadExternalDemos();
+}
+
+// --- SKU File Upload ---
+async function uploadSkuFile() {
+  const file = document.getElementById('skuf-file').files[0];
+  if (!file) { status('skuf-status', '请选择文件', false); return; }
+  const form = new FormData();
+  form.append('token', T());
+  form.append('file', file);
+  form.append('product', document.getElementById('skuf-product').value);
+  form.append('description', document.getElementById('skuf-desc').value);
+  const res = await fetch('/admin/sku/upload', { method: 'POST', body: form });
+  const d = await res.json();
+  status('skuf-status', res.ok ? '上传成功！' : d.detail, res.ok);
+  if (res.ok) loadSkuFiles();
+}
+
+async function loadSkuFiles() {
+  const res = await fetch('/admin/sku?token=' + encodeURIComponent(T()));
+  if (!res.ok) { document.getElementById('skuf-list').textContent = '请输入令牌查看'; return; }
+  const d = await res.json();
+  const el = document.getElementById('skuf-list');
+  const files = d.files || [];
+  if (!files.length) { el.textContent = '暂无文档。'; return; }
+  el.innerHTML = files.map(x => `<div class="list-item"><span>${x.original_name} — ${x.product} <span style="color:#8a94a6;font-size:11px">${x.description || ''}</span></span><span class="del" onclick="delSkuFile('${x.stored_name}')">删除</span></div>`).join('');
+}
+
+async function delSkuFile(name) {
+  await fetch('/admin/sku/file/' + encodeURIComponent(name) + '?token=' + encodeURIComponent(T()), { method: 'DELETE' });
+  loadSkuFiles();
+}
+
+// --- SKU Structured ---
+async function addSku() {
+  const form = new FormData();
+  form.append('token', T());
+  form.append('product', document.getElementById('sku-product').value);
+  form.append('skus_json', document.getElementById('sku-json').value);
+  form.append('calculation_notes', document.getElementById('sku-notes').value);
+  const res = await fetch('/admin/sku', { method: 'POST', body: form });
+  const d = await res.json();
+  status('sku-status', res.ok ? '已保存！' : d.detail, res.ok);
+  if (res.ok) loadSkus();
+}
+
+async function loadSkus() {
+  const res = await fetch('/admin/sku?token=' + encodeURIComponent(T()));
+  if (!res.ok) { document.getElementById('sku-list').textContent = '请输入令牌查看'; return; }
+  const d = await res.json();
+  const el = document.getElementById('sku-list');
+  const products = d.products || [];
+  el.textContent = products.length ? products.join(', ') : '暂无产品。';
+}
+
+// --- TechDocs File Upload ---
+async function uploadTechdocFile() {
+  const file = document.getElementById('tdf-file').files[0];
+  if (!file) { status('tdf-status', '请选择文件', false); return; }
+  const form = new FormData();
+  form.append('token', T());
+  form.append('file', file);
+  form.append('title', document.getElementById('tdf-title').value);
+  form.append('product', document.getElementById('tdf-product').value);
+  form.append('description', document.getElementById('tdf-desc').value);
+  const res = await fetch('/admin/techdocs/upload', { method: 'POST', body: form });
+  const d = await res.json();
+  status('tdf-status', res.ok ? '上传成功！' : d.detail, res.ok);
+  if (res.ok) loadTechdocFiles();
+}
+
+async function loadTechdocFiles() {
+  const res = await fetch('/admin/techdocs/files?token=' + encodeURIComponent(T()));
+  if (!res.ok) { document.getElementById('tdf-list').textContent = '请输入令牌查看'; return; }
+  const d = await res.json();
+  const el = document.getElementById('tdf-list');
+  const files = d.files || [];
+  if (!files.length) { el.textContent = '暂无文档。'; return; }
+  el.innerHTML = files.map(x => `<div class="list-item"><span>${x.title} (${x.original_name}) — ${x.product}</span><span class="del" onclick="delTechdocFile('${x.stored_name}')">删除</span></div>`).join('');
+}
+
+async function delTechdocFile(name) {
+  await fetch('/admin/techdocs/file/' + encodeURIComponent(name) + '?token=' + encodeURIComponent(T()), { method: 'DELETE' });
+  loadTechdocFiles();
+}
+
+// --- TechDocs Text ---
+async function addTechdoc() {
+  const form = new FormData();
+  form.append('token', T());
+  form.append('title', document.getElementById('td-title').value);
+  form.append('content', document.getElementById('td-content').value);
+  form.append('product', document.getElementById('td-product').value);
+  form.append('tags', document.getElementById('td-tags').value);
+  const res = await fetch('/admin/techdocs', { method: 'POST', body: form });
+  const d = await res.json();
+  status('td-status', res.ok ? '已添加！' : d.detail, res.ok);
+}
+
+// Init
+init();
+</script>
+</body>
+</html>

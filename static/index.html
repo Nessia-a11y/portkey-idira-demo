@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PANW 产品助手</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #0f1419;
+    color: #e6e6e6;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 16px 24px;
+    background: #1a1f2e;
+    border-bottom: 1px solid #2a2f3e;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  header h1 { margin: 0; font-size: 18px; font-weight: 600; }
+  header .badge { font-size: 12px; background: #f04e23; color: white; padding: 2px 8px; border-radius: 4px; }
+  header .user-info { margin-left: auto; display: flex; align-items: center; gap: 12px; font-size: 13px; }
+  header .user-info .email { color: #8a94a6; }
+  header nav a { color: #8a94a6; text-decoration: none; font-size: 14px; margin-left: 16px; }
+  header nav a:hover { color: #e6e6e6; }
+  .logout-btn { background: none; border: 1px solid #2a2f3e; color: #8a94a6; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+  .logout-btn:hover { color: #e6e6e6; border-color: #f04e23; }
+
+  /* Auth forms */
+  .auth-container {
+    max-width: 400px; margin: 80px auto; padding: 32px;
+    background: #1a1f2e; border: 1px solid #2a2f3e; border-radius: 12px;
+  }
+  .auth-container h2 { margin: 0 0 24px; font-size: 20px; text-align: center; }
+  .auth-container .form-group { margin-bottom: 16px; }
+  .auth-container label { display: block; font-size: 13px; color: #8a94a6; margin-bottom: 4px; }
+  .auth-container input {
+    width: 100%; padding: 10px 14px; border-radius: 6px;
+    border: 1px solid #2a2f3e; background: #0f1419; color: #e6e6e6; font-size: 14px;
+  }
+  .auth-container input:focus { outline: none; border-color: #f04e23; }
+  .auth-container .btn {
+    width: 100%; padding: 12px; border-radius: 6px; border: none;
+    background: #f04e23; color: white; font-weight: 600; font-size: 14px; cursor: pointer;
+  }
+  .auth-container .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .auth-container .switch { text-align: center; margin-top: 16px; font-size: 13px; color: #8a94a6; }
+  .auth-container .switch a { color: #f04e23; cursor: pointer; text-decoration: none; }
+  .auth-container .error { color: #f44336; font-size: 13px; margin-top: 8px; text-align: center; }
+  .auth-container .info { color: #4caf50; font-size: 13px; margin-top: 8px; text-align: center; }
+
+  /* Chat */
+  #app-chat { display: none; flex-direction: column; flex: 1; }
+  .user-type { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .user-type select {
+    background: #0f1419; color: #e6e6e6; border: 1px solid #2a2f3e;
+    border-radius: 4px; padding: 4px 8px; font-size: 13px;
+  }
+  #messages { flex: 1; overflow-y: auto; padding: 24px; max-width: 900px; width: 100%; margin: 0 auto; }
+  .msg { margin-bottom: 20px; padding: 12px 16px; border-radius: 8px; line-height: 1.5; white-space: pre-wrap; }
+  .msg.user { background: #1e3a5f; margin-left: 60px; }
+  .msg.assistant { background: #1a1f2e; margin-right: 60px; }
+  .msg .role { font-size: 12px; text-transform: uppercase; color: #8a94a6; margin-bottom: 4px; letter-spacing: 0.5px; }
+  .tools { font-size: 12px; color: #8a94a6; margin-top: 8px; padding: 8px; background: #0f1419; border-radius: 4px; font-family: monospace; }
+  #chat-form {
+    display: flex; padding: 16px 24px; gap: 12px;
+    background: #1a1f2e; border-top: 1px solid #2a2f3e; max-width: 900px; width: 100%; margin: 0 auto;
+    align-items: center;
+  }
+  #chat-form input[type="text"] {
+    flex: 1; padding: 12px 16px; border-radius: 8px;
+    border: 1px solid #2a2f3e; background: #0f1419; color: #e6e6e6; font-size: 14px;
+  }
+  #chat-form input[type="text"]:focus { outline: none; border-color: #f04e23; }
+  #chat-form button {
+    padding: 12px 20px; border-radius: 8px; border: none;
+    background: #f04e23; color: white; font-weight: 600; cursor: pointer;
+  }
+  #chat-form button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .upload-btn {
+    padding: 10px 12px; border-radius: 8px; border: 1px solid #2a2f3e;
+    background: #0f1419; color: #8a94a6; cursor: pointer; font-size: 16px; display: flex; align-items: center;
+  }
+  .upload-btn:hover { border-color: #f04e23; color: #f04e23; }
+  .upload-btn input { display: none; }
+  .file-badge {
+    font-size: 12px; background: #1a3a2a; color: #4caf50; padding: 4px 8px; border-radius: 4px;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .file-badge .remove { cursor: pointer; color: #f44336; }
+  .download-link { color: #f04e23; text-decoration: underline; cursor: pointer; }
+  .thinking { font-style: italic; color: #8a94a6; }
+</style>
+</head>
+<body>
+
+<!-- Auth Screen -->
+<div id="app-auth">
+  <div class="auth-container" id="auth-login">
+    <h2>登录</h2>
+    <div class="form-group"><label>邮箱</label><input id="login-email" type="email" placeholder="your@company.com" /></div>
+    <div class="form-group"><label>密码</label><input id="login-password" type="password" placeholder="请输入密码" /></div>
+    <button class="btn" onclick="doLogin()">登录</button>
+    <div id="login-error" class="error"></div>
+    <div class="switch">还没有账号？<a onclick="showRegister()">注册</a></div>
+  </div>
+
+  <div class="auth-container" id="auth-register" style="display:none">
+    <h2>注册</h2>
+    <div class="form-group"><label>邮箱（需使用公司域名）</label><input id="reg-email" type="email" placeholder="your@company.com" /></div>
+    <div class="form-group"><label>密码</label><input id="reg-password" type="password" placeholder="至少8位字符" /></div>
+    <div class="form-group"><label>确认密码</label><input id="reg-password2" type="password" placeholder="再次输入密码" /></div>
+    <button class="btn" onclick="doRegister()">注册</button>
+    <div id="reg-error" class="error"></div>
+    <div id="reg-info" class="info"></div>
+    <div class="switch">已有账号？<a onclick="showLogin()">登录</a></div>
+  </div>
+
+</div>
+
+<!-- Chat App (hidden until authenticated) -->
+<div id="app-chat">
+  <header>
+    <h1>PANW 产品助手</h1>
+    <span class="badge">via Portkey</span>
+    <div class="user-type">
+      <label>身份：</label>
+      <select id="user-type">
+        <option value="external">外部用户（客户/合作伙伴）</option>
+        <option value="internal">内部员工（PANW）</option>
+      </select>
+    </div>
+    <div class="user-info">
+      <span class="email" id="current-user"></span>
+      <button class="logout-btn" onclick="doLogout()">退出</button>
+    </div>
+    <nav id="admin-nav" style="display:none"><a href="/static/admin.html">管理后台</a></nav>
+  </header>
+  <div id="messages"></div>
+  <div id="file-preview" style="display:none; padding: 8px 24px; max-width: 900px; margin: 0 auto; width: 100%;"></div>
+  <form id="chat-form">
+    <label class="upload-btn" title="上传文件翻译 (PPTX/DOCX/PDF)">
+      📎
+      <input id="file-input" type="file" accept=".pptx,.docx,.pdf,.txt" />
+    </label>
+    <input id="input" type="text" placeholder="询问 Cortex、Strata、Prisma SASE、Prisma AIRS、Idira 相关问题..." autocomplete="off" />
+    <button id="send" type="submit">发送</button>
+  </form>
+</div>
+
+<script>
+let currentEmail = '';
+
+async function checkAuth() {
+  try {
+    const res = await fetch('/auth/me');
+    if (res.ok) {
+      const data = await res.json();
+      currentEmail = data.email;
+      showChat();
+    }
+  } catch {}
+}
+
+function showLogin() {
+  document.getElementById('auth-login').style.display = '';
+  document.getElementById('auth-register').style.display = 'none';
+  document.getElementById('auth-otp').style.display = 'none';
+  clearErrors();
+}
+function showRegister() {
+  document.getElementById('auth-login').style.display = 'none';
+  document.getElementById('auth-register').style.display = '';
+  document.getElementById('auth-otp').style.display = 'none';
+  clearErrors();
+}
+function showChat() {
+  document.getElementById('app-auth').style.display = 'none';
+  document.getElementById('app-chat').style.display = 'flex';
+  document.getElementById('current-user').textContent = currentEmail;
+  checkAdmin();
+}
+
+async function checkAdmin() {
+  try {
+    const res = await fetch('/admin/check');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.is_admin) {
+        document.getElementById('admin-nav').style.display = '';
+      }
+    }
+  } catch {}
+}
+function clearErrors() {
+  document.querySelectorAll('.error, .info').forEach(e => e.textContent = '');
+}
+
+async function doLogin() {
+  clearErrors();
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  if (!email || !password) { document.getElementById('login-error').textContent = '请填写所有字段'; return; }
+
+  const res = await fetch('/auth/login', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({email, password})
+  });
+  const data = await res.json();
+  if (!res.ok) { document.getElementById('login-error').textContent = data.detail || '登录失败'; return; }
+
+  currentEmail = data.email;
+  showChat();
+}
+
+async function doRegister() {
+  clearErrors();
+  const email = document.getElementById('reg-email').value.trim();
+  const pw = document.getElementById('reg-password').value;
+  const pw2 = document.getElementById('reg-password2').value;
+  if (!email || !pw) { document.getElementById('reg-error').textContent = '请填写所有字段'; return; }
+  if (pw.length < 8) { document.getElementById('reg-error').textContent = '密码至少需要8位字符'; return; }
+  if (pw !== pw2) { document.getElementById('reg-error').textContent = '两次密码不一致'; return; }
+
+  const res = await fetch('/auth/register', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({email, password: pw})
+  });
+  const data = await res.json();
+  if (!res.ok) { document.getElementById('reg-error').textContent = data.detail || '注册失败'; return; }
+
+  document.getElementById('reg-info').textContent = '注册成功！即将跳转到登录页面...';
+  setTimeout(showLogin, 1500);
+}
+
+async function doLogout() {
+  await fetch('/auth/logout', {method:'POST'});
+  currentEmail = '';
+  document.getElementById('app-chat').style.display = 'none';
+  document.getElementById('app-auth').style.display = '';
+  showLogin();
+}
+
+// Chat logic
+const messagesDiv = document.getElementById('messages');
+const form = document.getElementById('chat-form');
+const input = document.getElementById('input');
+const sendBtn = document.getElementById('send');
+const userTypeSelect = document.getElementById('user-type');
+const fileInput = document.getElementById('file-input');
+const filePreview = document.getElementById('file-preview');
+const history = [];
+let uploadedFile = null;
+
+// File upload handling
+fileInput.addEventListener('change', async () => {
+  const file = fileInput.files[0];
+  if (!file) return;
+
+  filePreview.style.display = '';
+  filePreview.innerHTML = `<span class="file-badge">📄 ${file.name} (上传中...)</span>`;
+
+  const form = new FormData();
+  form.append('file', file);
+
+  try {
+    const res = await fetch('/api/upload', { method: 'POST', body: form });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || '上传失败');
+
+    uploadedFile = data.filename;
+    filePreview.innerHTML = `<span class="file-badge">📄 ${data.filename} (${(data.size / 1024).toFixed(0)} KB) <span class="remove" onclick="removeFile()">✕</span></span>`;
+  } catch (err) {
+    filePreview.innerHTML = `<span style="color:#f44336;font-size:13px;">上传失败: ${err.message}</span>`;
+    uploadedFile = null;
+  }
+  fileInput.value = '';
+});
+
+function removeFile() {
+  uploadedFile = null;
+  filePreview.style.display = 'none';
+  filePreview.innerHTML = '';
+}
+
+function addMessage(role, content, tools) {
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+  const roleLabel = document.createElement('div');
+  roleLabel.className = 'role';
+  roleLabel.textContent = role === 'user' ? '你' : '助手';
+  div.appendChild(roleLabel);
+  const body = document.createElement('div');
+  body.innerHTML = formatContent(content);
+  div.appendChild(body);
+  if (tools && tools.length) {
+    const t = document.createElement('div');
+    t.className = 'tools';
+    t.textContent = '使用技能：' + tools.map(x => x.name).join(', ');
+    div.appendChild(t);
+  }
+  messagesDiv.appendChild(div);
+  messagesDiv.scrollTop = messagesDiv.scrollHeight;
+  return div;
+}
+
+function formatContent(text) {
+  // Convert download links to clickable links
+  return text.replace(/\/api\/download\/[^\s)]+/g, url => {
+    const name = url.split('/').pop();
+    return `<a class="download-link" href="${url}" target="_blank" download>${name}</a>`;
+  });
+}
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  let text = input.value.trim();
+  if (!text && !uploadedFile) return;
+
+  // If file is attached, mention it in the message
+  if (uploadedFile) {
+    const fileNote = `[已上传文件: ${uploadedFile}]`;
+    text = text ? `${text}\n${fileNote}` : `请翻译这个文件: ${uploadedFile}`;
+    removeFile();
+  }
+
+  input.value = '';
+  sendBtn.disabled = true;
+
+  addMessage('user', text);
+  history.push({ role: 'user', content: text });
+
+  const pending = addMessage('assistant', '');
+  pending.querySelector('div:nth-child(2)').innerHTML = '<span class="thinking">思考中...</span>';
+
+  try {
+    const res = await fetch('/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: history, user_type: userTypeSelect.value })
+    });
+    if (res.status === 401) { doLogout(); return; }
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || '错误');
+
+    pending.querySelector('div:nth-child(2)').innerHTML = formatContent(data.reply);
+    if (data.tool_calls && data.tool_calls.length) {
+      const t = document.createElement('div');
+      t.className = 'tools';
+      t.textContent = '使用技能：' + data.tool_calls.map(x => x.name).join(', ');
+      pending.appendChild(t);
+    }
+    history.push({ role: 'assistant', content: data.reply });
+  } catch (err) {
+    pending.querySelector('div:nth-child(2)').textContent = '错误：' + err.message;
+  } finally {
+    sendBtn.disabled = false;
+    input.focus();
+  }
+});
+
+// Check auth on load
+checkAuth();
+</script>
+</body>
+</html>
