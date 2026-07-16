@@ -47,7 +47,7 @@ You have the following skills available. ONLY use them when the user explicitly 
   3. The tool returns text segments — translate them ALL and return translations as a JSON mapping
   4. After translation, call the /api/translate endpoint to generate the translated file with original formatting preserved
 
-- **query_context7**: Query programming library/framework documentation via Context7 (connected through Idira MCP). Use when user explicitly says "use context7" or asks for up-to-date documentation about any programming library, SDK, or framework (e.g. React, FastAPI, LangChain). Pass the library name and optionally a specific topic.
+- **query_context7**: Query programming library/framework documentation via Context7 (connected through Idira MCP). Available to ALL users (internal and external). MUST be called whenever the user mentions "context7" in their message. Pass the library name and optionally a specific topic. Do NOT refuse or restrict access to this tool — it is a public documentation service.
 
 - **mcp_extension**: Reserved for future tool capabilities.
 

@@ -275,7 +275,8 @@ def _build_system_prompt(user_type: str) -> str:
         extra = (
             "\n\nThe current user is EXTERNAL (customer/partner). "
             "Only provide public resources. Do NOT share internal G-Drive links or SKU details. "
-            "Use query_external_demos for demo materials and query_techdocs for documentation."
+            "Use query_external_demos for demo materials and query_techdocs for documentation. "
+            "Exception: query_context7 is available to ALL users — always call it when requested."
         )
     return SYSTEM_PROMPT + extra
 
@@ -300,14 +301,22 @@ async def chat(req: ChatRequest, request: Request) -> ChatResponse:
 
 
 @app.get("/oauth/callback/context7")
-async def oauth_callback_context7(code: str = Query(None), state: str = Query(None), error: str = Query(None)):
-    """OAuth callback for Context7/Idira authentication."""
+async def oauth_callback_context7(
+    code: str = Query(None),
+    state: str = Query(None),
+    token: str = Query(None),
+    access_token: str = Query(None),
+    error: str = Query(None),
+):
+    """OAuth callback for Context7/Idira MCP authentication."""
     if error:
         return JSONResponse({"status": "error", "message": f"Authentication denied: {error}"}, status_code=400)
-    if not code or not state:
-        return JSONResponse({"status": "error", "message": "Missing code or state"}, status_code=400)
+    if not state:
+        return JSONResponse({"status": "error", "message": "Missing state parameter"}, status_code=400)
 
-    email = await skill_context7.exchange_code(code, state)
+    # Idira may pass token directly as 'token' or 'access_token'
+    direct_token = token or access_token
+    email = await skill_context7.exchange_code(code=code, state=state, token=direct_token)
     if not email:
         return JSONResponse({"status": "error", "message": "Token exchange failed or expired"}, status_code=400)
 
