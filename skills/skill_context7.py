@@ -5,7 +5,6 @@ On first use, the user is redirected to Idira's login page. After auth, the
 access token is stored per-user and used for subsequent MCP calls.
 """
 
-import hashlib
 import httpx
 import json
 import os
@@ -18,12 +17,11 @@ from urllib.parse import urlencode
 CONTEXT7_URL = "https://democn.data.aigw.cyberark.cloud/mcp/context7mcpserver"
 CLIENT_ID = "53d48153-f5b4-4ae9-8a9d-a9a0042db898"
 
-# OAuth endpoints — derived from MCP server base URL
+# MCP auth endpoint — Idira uses /mcp/start-auth/{client_id} pattern
 OAUTH_BASE = "https://democn.data.aigw.cyberark.cloud"
-AUTHORIZE_URL = f"{OAUTH_BASE}/oauth2/authorize"
-TOKEN_URL = f"{OAUTH_BASE}/oauth2/token"
+START_AUTH_URL = f"{OAUTH_BASE}/mcp/start-auth/{CLIENT_ID}"
 
-# Redirect URI — must match what's registered in Idira
+# Redirect URI after auth completes
 REDIRECT_URI = os.getenv("OAUTH_REDIRECT_URI", "https://13.213.58.106/oauth/callback/context7")
 
 # Token storage
@@ -96,7 +94,8 @@ def save_user_token(email: str, token_data: dict):
 def _refresh_token(refresh_token: str) -> Optional[dict]:
     """Attempt to refresh an expired access token."""
     try:
-        resp = httpx.post(TOKEN_URL, data={
+        token_url = f"{OAUTH_BASE}/oauth2/token"
+        resp = httpx.post(token_url, data={
             "grant_type": "refresh_token",
             "refresh_token": refresh_token,
             "client_id": CLIENT_ID,
@@ -109,45 +108,38 @@ def _refresh_token(refresh_token: str) -> Optional[dict]:
 
 
 def create_auth_url(email: str) -> str:
-    """Generate OAuth authorization URL with PKCE for a user."""
+    """Generate MCP start-auth URL for Idira authentication."""
     _ensure_dirs()
-    code_verifier = secrets.token_urlsafe(64)
-    code_challenge = hashlib.sha256(code_verifier.encode()).digest()
-    import base64
-    code_challenge_b64 = base64.urlsafe_b64encode(code_challenge).rstrip(b"=").decode()
 
     state = secrets.token_urlsafe(32)
 
     # Store pending auth state
     pending = {
         "email": email,
-        "code_verifier": code_verifier,
         "state": state,
         "created_at": time.time(),
     }
     (PENDING_DIR / f"{state}.json").write_text(json.dumps(pending))
 
     params = {
-        "response_type": "code",
-        "client_id": CLIENT_ID,
-        "redirect_uri": REDIRECT_URI,
-        "scope": "openid",
-        "state": state,
-        "code_challenge": code_challenge_b64,
-        "code_challenge_method": "S256",
+        "redirect_url": REDIRECT_URI + f"?state={state}",
+        "open_in_browser": "1",
+        "product_surface": "panw-product-helper",
     }
-    return f"{AUTHORIZE_URL}?{urlencode(params)}"
+    return f"{START_AUTH_URL}?{urlencode(params)}"
 
 
-async def exchange_code(code: str, state: str) -> Optional[str]:
-    """Exchange authorization code for access token. Returns email on success."""
+async def exchange_code(code: str = None, state: str = None, token: str = None) -> Optional[str]:
+    """Process auth callback. Accepts either a code to exchange or a direct token."""
+    if not state:
+        return None
+
     pending_path = PENDING_DIR / f"{state}.json"
     if not pending_path.exists():
         return None
 
     pending = json.loads(pending_path.read_text())
     email = pending["email"]
-    code_verifier = pending["code_verifier"]
 
     # Clean up
     pending_path.unlink(missing_ok=True)
@@ -156,21 +148,31 @@ async def exchange_code(code: str, state: str) -> Optional[str]:
     if time.time() - pending["created_at"] > 600:
         return None
 
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        resp = await client.post(TOKEN_URL, data={
-            "grant_type": "authorization_code",
-            "code": code,
-            "redirect_uri": REDIRECT_URI,
-            "client_id": CLIENT_ID,
-            "code_verifier": code_verifier,
-        })
+    # If token is provided directly in callback (MCP auth pattern)
+    if token:
+        token_data = {"access_token": token, "expires_at": time.time() + 3600}
+        save_user_token(email, token_data)
+        return email
 
-    if resp.status_code != 200:
-        return None
+    # If code is provided, exchange it
+    if code:
+        token_url = f"{OAUTH_BASE}/oauth2/token"
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(token_url, data={
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": REDIRECT_URI,
+                "client_id": CLIENT_ID,
+            })
 
-    token_data = resp.json()
-    save_user_token(email, token_data)
-    return email
+        if resp.status_code != 200:
+            return None
+
+        token_data = resp.json()
+        save_user_token(email, token_data)
+        return email
+
+    return None
 
 
 def _headers(access_token: str) -> dict[str, str]:
