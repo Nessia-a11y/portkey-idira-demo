@@ -143,11 +143,14 @@ def create_auth_url(email: str) -> str:
 
 async def exchange_code(code: str = None, state: str = None, token: str = None) -> Optional[str]:
     """Exchange authorization code for access token using PKCE. Returns email on success."""
+    print(f"[context7] exchange_code called: code={bool(code)}, state={state}, token={bool(token)}")
+
     if not state:
         return None
 
     pending_path = PENDING_DIR / f"{state}.json"
     if not pending_path.exists():
+        print(f"[context7] pending file not found for state: {state}")
         return None
 
     pending = json.loads(pending_path.read_text())
@@ -159,16 +162,19 @@ async def exchange_code(code: str = None, state: str = None, token: str = None) 
 
     # Check expiry (10 min)
     if time.time() - pending["created_at"] > 600:
+        print(f"[context7] pending expired for {email}")
         return None
 
     # If token is provided directly in callback
     if token:
         token_data = {"access_token": token, "expires_at": time.time() + 3600}
         save_user_token(email, token_data)
+        print(f"[context7] direct token saved for {email}")
         return email
 
     # Exchange code for token with PKCE code_verifier
     if code:
+        print(f"[context7] exchanging code for {email}...")
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.post(TOKEN_URL, data={
                 "grant_type": "authorization_code",
@@ -178,11 +184,13 @@ async def exchange_code(code: str = None, state: str = None, token: str = None) 
                 "code_verifier": code_verifier,
             })
 
+        print(f"[context7] token exchange response: {resp.status_code} {resp.text[:200]}")
         if resp.status_code != 200:
             return None
 
         token_data = resp.json()
         save_user_token(email, token_data)
+        print(f"[context7] token saved for {email}")
         return email
 
     return None
