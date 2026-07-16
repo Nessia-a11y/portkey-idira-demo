@@ -239,6 +239,8 @@ async def _call_mcp_tool(tool_name: str, arguments: dict[str, Any], access_token
     async with httpx.AsyncClient(timeout=60.0) as client:
         resp = await client.post(CONTEXT7_URL, json=payload, headers=headers)
 
+        print(f"[context7] MCP call {tool_name}: status={resp.status_code} body={resp.text[:300]}")
+
         if resp.status_code == 401 or resp.status_code == 403:
             raise Exception(f"AUTH_EXPIRED: {resp.status_code}")
 
