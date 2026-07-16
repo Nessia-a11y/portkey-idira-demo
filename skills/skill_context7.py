@@ -195,15 +195,23 @@ async def _call_mcp_tool(tool_name: str, arguments: dict[str, Any], access_token
 
     headers = {"Authorization": f"Bearer {access_token}"}
 
-    async with sse_client(url=CONTEXT7_URL, headers=headers) as (read, write):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            result = await session.call_tool(tool_name, arguments)
-            parts = []
-            for block in result.content:
-                if hasattr(block, "text"):
-                    parts.append(block.text)
-            return "\n".join(parts) if parts else "(no output)"
+    try:
+        async with sse_client(url=CONTEXT7_URL, headers=headers) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                result = await session.call_tool(tool_name, arguments)
+                parts = []
+                for block in result.content:
+                    if hasattr(block, "text"):
+                        parts.append(block.text)
+                return "\n".join(parts) if parts else "(no output)"
+    except Exception as e:
+        error_msg = str(e)
+        print(f"[context7] MCP SSE error: {error_msg}")
+        # If auth-related error, clear token so user can re-auth
+        if "401" in error_msg or "403" in error_msg or "unauthorized" in error_msg.lower():
+            raise Exception(f"AUTH_EXPIRED: {error_msg}")
+        raise
 
 
 async def handle(arguments: dict[str, Any]) -> str:
@@ -233,7 +241,14 @@ async def handle(arguments: dict[str, Any]) -> str:
     try:
         resolve_result = await _call_mcp_tool("resolve-library-id", {"libraryName": library_name}, token)
     except Exception as e:
-        return f"Failed to resolve library: {e}"
+        # Any connection failure — clear token and prompt re-auth
+        _token_path(email).unlink(missing_ok=True)
+        auth_url = create_auth_url(email)
+        return json.dumps({
+            "needs_auth": True,
+            "auth_url": auth_url,
+            "message": f"Idira 连接失败（{type(e).__name__}），请重新进行身份验证。",
+        })
 
     if not resolve_result or "error" in resolve_result.lower():
         return f"Could not resolve library '{library_name}': {resolve_result}"
@@ -246,6 +261,12 @@ async def handle(arguments: dict[str, Any]) -> str:
             doc_args["topic"] = topic
         docs_result = await _call_mcp_tool("get-library-docs", doc_args, token)
     except Exception as e:
-        return f"Failed to fetch docs for '{library_name}': {e}"
+        _token_path(email).unlink(missing_ok=True)
+        auth_url = create_auth_url(email)
+        return json.dumps({
+            "needs_auth": True,
+            "auth_url": auth_url,
+            "message": f"Idira 连接失败（{type(e).__name__}），请重新进行身份验证。",
+        })
 
     return docs_result if docs_result else f"No documentation found for '{library_name}'"
