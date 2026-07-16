@@ -362,8 +362,7 @@ form.addEventListener('submit', async (e) => {
           try {
             const r = JSON.parse(tc.result);
             if (r.needs_auth && r.auth_url) {
-              reply = r.message + '\n\n[点击这里进行 Idira 身份验证](' + r.auth_url + ')';
-              window.open(r.auth_url, '_blank', 'width=600,height=700');
+              reply = r.message + '\n\n<a class="download-link" href="' + r.auth_url + '" target="_blank">点击这里进行 Idira 身份验证</a>';
             }
           } catch {}
         }
