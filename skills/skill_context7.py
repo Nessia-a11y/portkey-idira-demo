@@ -17,9 +17,10 @@ from urllib.parse import urlencode
 CONTEXT7_URL = "https://democn.data.aigw.cyberark.cloud/mcp/context7mcpserver"
 CLIENT_ID = "53d48153-f5b4-4ae9-8a9d-a9a0042db898"
 
-# MCP auth endpoint — Idira uses /mcp/start-auth/{client_id} pattern
+# OAuth endpoints from .well-known/oauth-authorization-server
 OAUTH_BASE = "https://democn.data.aigw.cyberark.cloud"
-START_AUTH_URL = f"{OAUTH_BASE}/mcp/start-auth/{CLIENT_ID}"
+AUTHORIZE_URL = f"{OAUTH_BASE}/OAuth2/Authorize"
+TOKEN_URL = f"{OAUTH_BASE}/OAuth2/Token"
 
 # Redirect URI after auth completes
 REDIRECT_URI = os.getenv("OAUTH_REDIRECT_URI", "https://13.213.58.106/oauth/callback/context7")
@@ -94,8 +95,7 @@ def save_user_token(email: str, token_data: dict):
 def _refresh_token(refresh_token: str) -> Optional[dict]:
     """Attempt to refresh an expired access token."""
     try:
-        token_url = f"{OAUTH_BASE}/oauth2/token"
-        resp = httpx.post(token_url, data={
+        resp = httpx.post(TOKEN_URL, data={
             "grant_type": "refresh_token",
             "refresh_token": refresh_token,
             "client_id": CLIENT_ID,
@@ -108,29 +108,41 @@ def _refresh_token(refresh_token: str) -> Optional[dict]:
 
 
 def create_auth_url(email: str) -> str:
-    """Generate MCP start-auth URL for Idira authentication."""
+    """Generate OAuth2 authorization URL with PKCE for Idira."""
+    import hashlib
+    import base64
     _ensure_dirs()
+
+    code_verifier = secrets.token_urlsafe(64)
+    code_challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(code_verifier.encode()).digest()
+    ).rstrip(b"=").decode()
 
     state = secrets.token_urlsafe(32)
 
     # Store pending auth state
     pending = {
         "email": email,
+        "code_verifier": code_verifier,
         "state": state,
         "created_at": time.time(),
     }
     (PENDING_DIR / f"{state}.json").write_text(json.dumps(pending))
 
     params = {
-        "redirect_url": REDIRECT_URI + f"?state={state}",
-        "open_in_browser": "1",
-        "product_surface": "panw-product-helper",
+        "response_type": "code",
+        "client_id": CLIENT_ID,
+        "redirect_uri": REDIRECT_URI,
+        "scope": "openid",
+        "state": state,
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256",
     }
-    return f"{START_AUTH_URL}?{urlencode(params)}"
+    return f"{AUTHORIZE_URL}?{urlencode(params)}"
 
 
 async def exchange_code(code: str = None, state: str = None, token: str = None) -> Optional[str]:
-    """Process auth callback. Accepts either a code to exchange or a direct token."""
+    """Exchange authorization code for access token using PKCE. Returns email on success."""
     if not state:
         return None
 
@@ -140,6 +152,7 @@ async def exchange_code(code: str = None, state: str = None, token: str = None) 
 
     pending = json.loads(pending_path.read_text())
     email = pending["email"]
+    code_verifier = pending.get("code_verifier", "")
 
     # Clean up
     pending_path.unlink(missing_ok=True)
@@ -148,21 +161,21 @@ async def exchange_code(code: str = None, state: str = None, token: str = None) 
     if time.time() - pending["created_at"] > 600:
         return None
 
-    # If token is provided directly in callback (MCP auth pattern)
+    # If token is provided directly in callback
     if token:
         token_data = {"access_token": token, "expires_at": time.time() + 3600}
         save_user_token(email, token_data)
         return email
 
-    # If code is provided, exchange it
+    # Exchange code for token with PKCE code_verifier
     if code:
-        token_url = f"{OAUTH_BASE}/oauth2/token"
         async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.post(token_url, data={
+            resp = await client.post(TOKEN_URL, data={
                 "grant_type": "authorization_code",
                 "code": code,
                 "redirect_uri": REDIRECT_URI,
                 "client_id": CLIENT_ID,
+                "code_verifier": code_verifier,
             })
 
         if resp.status_code != 200:
