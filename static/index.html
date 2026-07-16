@@ -311,11 +311,16 @@ function addMessage(role, content, tools) {
 }
 
 function formatContent(text) {
+  // Convert markdown links [text](url) to clickable links
+  text = text.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_, label, url) => {
+    return `<a class="download-link" href="${url}" target="_blank">${label}</a>`;
+  });
   // Convert download links to clickable links
-  return text.replace(/\/api\/download\/[^\s)]+/g, url => {
+  text = text.replace(/\/api\/download\/[^\s)]+/g, url => {
     const name = url.split('/').pop();
     return `<a class="download-link" href="${url}" target="_blank" download>${name}</a>`;
   });
+  return text;
 }
 
 form.addEventListener('submit', async (e) => {
@@ -349,14 +354,30 @@ form.addEventListener('submit', async (e) => {
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || '错误');
 
-    pending.querySelector('div:nth-child(2)').innerHTML = formatContent(data.reply);
+    // Check if context7 needs OAuth authentication
+    let reply = data.reply;
+    if (data.tool_calls && data.tool_calls.length) {
+      for (const tc of data.tool_calls) {
+        if (tc.name === 'query_context7' && tc.result) {
+          try {
+            const r = JSON.parse(tc.result);
+            if (r.needs_auth && r.auth_url) {
+              reply = r.message + '\n\n[点击这里进行 Idira 身份验证](' + r.auth_url + ')';
+              window.open(r.auth_url, '_blank', 'width=600,height=700');
+            }
+          } catch {}
+        }
+      }
+    }
+
+    pending.querySelector('div:nth-child(2)').innerHTML = formatContent(reply);
     if (data.tool_calls && data.tool_calls.length) {
       const t = document.createElement('div');
       t.className = 'tools';
       t.textContent = '使用技能：' + data.tool_calls.map(x => x.name).join(', ');
       pending.appendChild(t);
     }
-    history.push({ role: 'assistant', content: data.reply });
+    history.push({ role: 'assistant', content: reply });
   } catch (err) {
     pending.querySelector('div:nth-child(2)').textContent = '错误：' + err.message;
   } finally {

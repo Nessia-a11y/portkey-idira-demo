@@ -18,7 +18,7 @@ from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Query, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from portkey_ai import Portkey
 from pydantic import BaseModel
 
@@ -193,9 +193,11 @@ def _get_tools_for_user(user_type: str) -> list[dict]:
     return all_tools if all_tools else None
 
 
-async def _dispatch_tool_call(name: str, arguments: dict) -> str:
+async def _dispatch_tool_call(name: str, arguments: dict, user_email: str = "") -> str:
     """Route a tool call to the appropriate skill or MCP server."""
     if name in SKILLS:
+        if name == "query_context7":
+            arguments["_user_email"] = user_email
         return await SKILLS[name].handle(arguments)
 
     # Fall through to MCP
@@ -208,7 +210,7 @@ async def _dispatch_tool_call(name: str, arguments: dict) -> str:
     return f"Unknown tool: {name}"
 
 
-async def run_agent_loop(client: Portkey, messages: list[dict], user_type: str, max_iterations: int = 10) -> tuple[str, list[dict]]:
+async def run_agent_loop(client: Portkey, messages: list[dict], user_type: str, user_email: str = "", max_iterations: int = 10) -> tuple[str, list[dict]]:
     """Run the tool-calling loop until the model produces a final text answer."""
     tool_trace: list[dict] = []
     tools = _get_tools_for_user(user_type)
@@ -247,7 +249,7 @@ async def run_agent_loop(client: Portkey, messages: list[dict], user_type: str, 
             except json.JSONDecodeError:
                 args = {}
 
-            result = await _dispatch_tool_call(name, args)
+            result = await _dispatch_tool_call(name, args, user_email)
             tool_trace.append({"name": name, "arguments": args, "result": result[:500]})
             messages.append(
                 {
@@ -280,7 +282,7 @@ def _build_system_prompt(user_type: str) -> str:
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest, request: Request) -> ChatResponse:
-    _require_auth(request)
+    email = _require_auth(request)
     if not req.messages:
         raise HTTPException(400, "messages cannot be empty")
 
@@ -291,10 +293,30 @@ async def chat(req: ChatRequest, request: Request) -> ChatResponse:
 
     try:
         client = make_client()
-        reply, trace = await run_agent_loop(client, convo, req.user_type)
+        reply, trace = await run_agent_loop(client, convo, req.user_type, user_email=email)
         return ChatResponse(reply=reply, tool_calls=trace)
     except Exception as e:
         raise HTTPException(500, f"agent error: {e}")
+
+
+@app.get("/oauth/callback/context7")
+async def oauth_callback_context7(code: str = Query(None), state: str = Query(None), error: str = Query(None)):
+    """OAuth callback for Context7/Idira authentication."""
+    if error:
+        return JSONResponse({"status": "error", "message": f"Authentication denied: {error}"}, status_code=400)
+    if not code or not state:
+        return JSONResponse({"status": "error", "message": "Missing code or state"}, status_code=400)
+
+    email = await skill_context7.exchange_code(code, state)
+    if not email:
+        return JSONResponse({"status": "error", "message": "Token exchange failed or expired"}, status_code=400)
+
+    html = """<!DOCTYPE html><html><head><meta charset="utf-8"><title>认证成功</title>
+    <style>body{font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;background:#0f1419;color:#e6e6e6;}
+    .box{text-align:center;padding:40px;background:#1a1f2e;border-radius:12px;border:1px solid #2a2f3e;}
+    .ok{color:#4caf50;font-size:48px;}</style></head>
+    <body><div class="box"><div class="ok">&#10003;</div><h2>Idira 认证成功</h2><p>你现在可以关闭此窗口，返回对话重新提问。</p></div></body></html>"""
+    return HTMLResponse(content=html)
 
 
 @app.get("/health")
